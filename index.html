@@ -19,24 +19,24 @@
 </head>
 <body>
   <h1>Happ Direct</h1>
-  <p id="status">Р—Р°РіСЂСѓР·РєР° СЃРїРёСЃРєР°вЂ¦</p>
-  <h2>Р”РѕР±Р°РІРёС‚СЊ СЃР°Р№С‚С‹</h2>
-  <p class="muted">РџРѕ РѕРґРЅРѕРјСѓ Р°РґСЂРµСЃСѓ РЅР° СЃС‚СЂРѕРєСѓ. РњРѕР¶РЅРѕ РІСЃС‚Р°РІР»СЏС‚СЊ РґРѕРјРµРЅС‹, РјР°СЃРєРё РёР»Рё РїРѕР»РЅС‹Рµ СЃСЃС‹Р»РєРё:</p>
+  <p id="status">Загрузка списка…</p>
+  <h2>Добавить сайты</h2>
+  <p class="muted">По одному адресу на строку. Можно вставлять домены, маски или полные ссылки:</p>
   <textarea id="input" placeholder="ozon.ru&#10;*.wildberries.ru&#10;https://www.gosuslugi.ru/&#10;geosite:category-bank-ru"></textarea>
   <div class="chips">
-    <button class="chip" data-rule="geosite:category-bank-ru">+ Р‘Р°РЅРєРё Р Р¤</button>
-    <button class="chip" data-rule="geosite:category-gov-ru">+ Р“РѕСЃСѓСЃР»СѓРіРё Р Р¤</button>
-    <button class="chip" data-rule="geosite:category-ecommerce-ru">+ РњР°РіР°Р·РёРЅС‹ Р Р¤</button>
-    <button class="chip" data-rule="geosite:category-travel-ru">+ РџСѓС‚РµС€РµСЃС‚РІРёСЏ Р Р¤</button>
-    <button class="chip" data-rule="geosite:yandex">+ РЇРЅРґРµРєСЃ</button>
+    <button class="chip" data-rule="geosite:category-bank-ru">+ Банки РФ</button>
+    <button class="chip" data-rule="geosite:category-gov-ru">+ Госуслуги РФ</button>
+    <button class="chip" data-rule="geosite:category-ecommerce-ru">+ Магазины РФ</button>
+    <button class="chip" data-rule="geosite:category-travel-ru">+ Путешествия РФ</button>
+    <button class="chip" data-rule="geosite:yandex">+ Яндекс</button>
     <button class="chip" data-rule="geosite:mailru-group">+ Mail.ru</button>
   </div>
-  <button id="install" disabled>РЈСЃС‚Р°РЅРѕРІРёС‚СЊ / РѕР±РЅРѕРІРёС‚СЊ РІ Happ</button>
-  <button id="copy" class="secondary" disabled>РЎРєРѕРїРёСЂРѕРІР°С‚СЊ РёС‚РѕРіРѕРІС‹Р№ direct.txt</button>
-  <button id="clear" class="secondary">РћС‡РёСЃС‚РёС‚СЊ РґРѕР±Р°РІР»РµРЅРЅС‹Рµ</button>
+  <button id="install" disabled>Установить / обновить в Happ</button>
+  <button id="copy" class="secondary" disabled>Скопировать итоговый direct.txt</button>
+  <button id="clear" class="secondary">Очистить добавленные</button>
   <p id="message" class="ok"></p>
-  <p class="muted">РџСЂРѕС„РёР»СЊ: My Cloud Direct. РџРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ direct.txt СЃРЅРѕРІР° РѕС‚РєСЂРѕР№С‚Рµ СЌС‚Сѓ СЃС‚СЂР°РЅРёС†Сѓ Рё РЅР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ.</p>
-  <details><summary>РџРѕРєР°Р·Р°С‚СЊ Р·Р°РіСЂСѓР¶РµРЅРЅС‹Рµ РїСЂР°РІРёР»Р°</summary><pre id="rules"></pre></details>
+  <p class="muted">Профиль: My Cloud Direct. После изменения direct.txt снова откройте эту страницу и нажмите кнопку.</p>
+  <details><summary>Показать загруженные правила</summary><pre id="rules"></pre></details>
   <script>
     const SOURCE='https://raw.githubusercontent.com/dem36rus/happ-direct/main/direct.txt';
     const button=document.querySelector('#install');
@@ -86,7 +86,7 @@
     function refresh(){
       const rules=allRules();
       rulesBox.textContent=rules.join('\n');
-      status.textContent='Р’ РѕР±Р»Р°РєРµ: '+cloudRules.length+' В· РёС‚РѕРіРѕРІС‹С… РїСЂР°РІРёР»: '+rules.length;
+      status.textContent='В облаке: '+cloudRules.length+' · итоговых правил: '+rules.length;
       localStorage.setItem('happ-direct-added',input.value);
     }
 
@@ -97,10 +97,18 @@
       if(!input.value.split(/\r?\n/).includes(rule)) input.value+=(input.value.trim()?'\n':'')+rule;
       refresh();
     });
-    clearButton.onclick=()=>{input.value='';message.textContent='Р”РѕР±Р°РІР»РµРЅРЅС‹Рµ СЃС‚СЂРѕРєРё РѕС‡РёС‰РµРЅС‹';refresh()};
+    clearButton.onclick=()=>{input.value='';message.textContent='Добавленные строки очищены';refresh()};
     copyButton.onclick=async()=>{
-      await navigator.clipboard.writeText(allRules().join('\n')+'\n');
-      message.textContent='РС‚РѕРіРѕРІС‹Р№ direct.txt СЃРєРѕРїРёСЂРѕРІР°РЅ. Р’СЃС‚Р°РІСЊС‚Рµ РµРіРѕ РІРјРµСЃС‚Рѕ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»Р° РЅР° GitHub Рё СЃРґРµР»Р°Р№С‚Рµ Commit.';
+      const result=allRules().join('\n')+'\n';
+      try{
+        await navigator.clipboard.writeText(result);
+      }catch{
+        input.value=result;
+        input.focus();
+        input.select();
+        document.execCommand('copy');
+      }
+      message.textContent='Итоговый direct.txt скопирован. Вставьте его вместо содержимого файла на GitHub и сделайте Commit.';
     };
 
     fetch(SOURCE+'?t='+Date.now(),{cache:'no-store'})
@@ -115,7 +123,7 @@
         copyButton.disabled=false;
         button.onclick=()=>location.href=profileLink(allRules());
       })
-      .catch(error=>status.textContent='РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ direct.txt: '+error.message);
+      .catch(error=>status.textContent='Не удалось загрузить direct.txt: '+error.message);
   </script>
 </body>
 </html>
