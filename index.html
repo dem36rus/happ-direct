@@ -6,23 +6,47 @@
   <title>Happ Direct</title>
   <style>
     body{font-family:system-ui,sans-serif;max-width:720px;margin:48px auto;padding:0 20px;color:#202124}
-    button{border:0;border-radius:10px;padding:14px 20px;background:#635bff;color:#fff;font-size:16px;cursor:pointer}
+    button{border:0;border-radius:10px;padding:12px 18px;background:#635bff;color:#fff;font-size:15px;cursor:pointer;margin:4px 6px 4px 0}
+    button.secondary{background:#e8e7ff;color:#3027b8}
     button:disabled{opacity:.55;cursor:not-allowed}
+    textarea{box-sizing:border-box;width:100%;min-height:160px;padding:12px;border:1px solid #bbb;border-radius:10px;font:14px ui-monospace,monospace}
+    .chips{display:flex;flex-wrap:wrap;gap:7px;margin:10px 0}
+    .chip{background:#f0f1f3;color:#333;padding:7px 10px;margin:0;border-radius:20px}
     pre{white-space:pre-wrap;background:#f3f4f6;padding:16px;border-radius:10px;max-height:360px;overflow:auto}
     .muted{color:#666}
+    .ok{color:#087b35}
   </style>
 </head>
 <body>
   <h1>Happ Direct</h1>
-  <p id="status">Загрузка списка…</p>
-  <button id="install" disabled>Установить / обновить в Happ</button>
-  <p class="muted">Профиль: My Cloud Direct. После изменения direct.txt снова откройте эту страницу и нажмите кнопку.</p>
-  <details><summary>Показать загруженные правила</summary><pre id="rules"></pre></details>
+  <p id="status">Р—Р°РіСЂСѓР·РєР° СЃРїРёСЃРєР°вЂ¦</p>
+  <h2>Р”РѕР±Р°РІРёС‚СЊ СЃР°Р№С‚С‹</h2>
+  <p class="muted">РџРѕ РѕРґРЅРѕРјСѓ Р°РґСЂРµСЃСѓ РЅР° СЃС‚СЂРѕРєСѓ. РњРѕР¶РЅРѕ РІСЃС‚Р°РІР»СЏС‚СЊ РґРѕРјРµРЅС‹, РјР°СЃРєРё РёР»Рё РїРѕР»РЅС‹Рµ СЃСЃС‹Р»РєРё:</p>
+  <textarea id="input" placeholder="ozon.ru&#10;*.wildberries.ru&#10;https://www.gosuslugi.ru/&#10;geosite:category-bank-ru"></textarea>
+  <div class="chips">
+    <button class="chip" data-rule="geosite:category-bank-ru">+ Р‘Р°РЅРєРё Р Р¤</button>
+    <button class="chip" data-rule="geosite:category-gov-ru">+ Р“РѕСЃСѓСЃР»СѓРіРё Р Р¤</button>
+    <button class="chip" data-rule="geosite:category-ecommerce-ru">+ РњР°РіР°Р·РёРЅС‹ Р Р¤</button>
+    <button class="chip" data-rule="geosite:category-travel-ru">+ РџСѓС‚РµС€РµСЃС‚РІРёСЏ Р Р¤</button>
+    <button class="chip" data-rule="geosite:yandex">+ РЇРЅРґРµРєСЃ</button>
+    <button class="chip" data-rule="geosite:mailru-group">+ Mail.ru</button>
+  </div>
+  <button id="install" disabled>РЈСЃС‚Р°РЅРѕРІРёС‚СЊ / РѕР±РЅРѕРІРёС‚СЊ РІ Happ</button>
+  <button id="copy" class="secondary" disabled>РЎРєРѕРїРёСЂРѕРІР°С‚СЊ РёС‚РѕРіРѕРІС‹Р№ direct.txt</button>
+  <button id="clear" class="secondary">РћС‡РёСЃС‚РёС‚СЊ РґРѕР±Р°РІР»РµРЅРЅС‹Рµ</button>
+  <p id="message" class="ok"></p>
+  <p class="muted">РџСЂРѕС„РёР»СЊ: My Cloud Direct. РџРѕСЃР»Рµ РёР·РјРµРЅРµРЅРёСЏ direct.txt СЃРЅРѕРІР° РѕС‚РєСЂРѕР№С‚Рµ СЌС‚Сѓ СЃС‚СЂР°РЅРёС†Сѓ Рё РЅР°Р¶РјРёС‚Рµ РєРЅРѕРїРєСѓ.</p>
+  <details><summary>РџРѕРєР°Р·Р°С‚СЊ Р·Р°РіСЂСѓР¶РµРЅРЅС‹Рµ РїСЂР°РІРёР»Р°</summary><pre id="rules"></pre></details>
   <script>
     const SOURCE='https://raw.githubusercontent.com/dem36rus/happ-direct/main/direct.txt';
     const button=document.querySelector('#install');
+    const copyButton=document.querySelector('#copy');
+    const clearButton=document.querySelector('#clear');
+    const input=document.querySelector('#input');
+    const message=document.querySelector('#message');
     const status=document.querySelector('#status');
     const rulesBox=document.querySelector('#rules');
+    let cloudRules=[];
 
     function toBase64(value){
       const bytes=new TextEncoder().encode(value);
@@ -31,38 +55,67 @@
       return btoa(binary);
     }
 
+    function normalize(line){
+      let value=line.trim();
+      if(!value||value.startsWith('#')) return '';
+      if(/^(domain|full|regexp|keyword|geosite|geoip):/i.test(value)) return value;
+      try{ if(/^https?:\/\//i.test(value)) value=new URL(value).hostname; }catch{}
+      value=value.replace(/^\*\./,'').replace(/^\.+/,'').replace(/\/$/,'').toLowerCase();
+      return value?'domain:'+value:'';
+    }
+
+    function allRules(){
+      const added=input.value.split(/\r?\n/).map(normalize).filter(Boolean);
+      return [...new Set([...cloudRules,...added])];
+    }
+
+    function profileLink(directSites){
+      const profile={
+        Name:'My Cloud Direct',GlobalProxy:true,RouteOrder:'block-direct-proxy',
+        RemoteDNSType:'DoH',RemoteDNSDomain:'https://cloudflare-dns.com/dns-query',RemoteDNSIP:'1.1.1.1',
+        DomesticDNSType:'DoH',DomesticDNSDomain:'https://dns.google/dns-query',DomesticDNSIP:'8.8.8.8',
+        Geoipurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat',
+        Geositeurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat',
+        DnsHosts:{'cloudflare-dns.com':'1.1.1.1','dns.google':'8.8.8.8'},DirectSites:directSites,
+        DirectIp:['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','224.0.0.0/4','255.255.255.255'],
+        ProxySites:[],ProxyIp:[],BlockSites:[],BlockIp:[],DomainStrategy:'IPIfNonMatch',FakeDNS:false,UseChunkFiles:true
+      };
+      return 'happ://routing/onadd/'+toBase64(JSON.stringify(profile));
+    }
+
+    function refresh(){
+      const rules=allRules();
+      rulesBox.textContent=rules.join('\n');
+      status.textContent='Р’ РѕР±Р»Р°РєРµ: '+cloudRules.length+' В· РёС‚РѕРіРѕРІС‹С… РїСЂР°РІРёР»: '+rules.length;
+      localStorage.setItem('happ-direct-added',input.value);
+    }
+
+    input.value=localStorage.getItem('happ-direct-added')||'';
+    input.addEventListener('input',()=>{message.textContent='';refresh()});
+    document.querySelectorAll('[data-rule]').forEach(chip=>chip.onclick=()=>{
+      const rule=chip.dataset.rule;
+      if(!input.value.split(/\r?\n/).includes(rule)) input.value+=(input.value.trim()?'\n':'')+rule;
+      refresh();
+    });
+    clearButton.onclick=()=>{input.value='';message.textContent='Р”РѕР±Р°РІР»РµРЅРЅС‹Рµ СЃС‚СЂРѕРєРё РѕС‡РёС‰РµРЅС‹';refresh()};
+    copyButton.onclick=async()=>{
+      await navigator.clipboard.writeText(allRules().join('\n')+'\n');
+      message.textContent='РС‚РѕРіРѕРІС‹Р№ direct.txt СЃРєРѕРїРёСЂРѕРІР°РЅ. Р’СЃС‚Р°РІСЊС‚Рµ РµРіРѕ РІРјРµСЃС‚Рѕ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ С„Р°Р№Р»Р° РЅР° GitHub Рё СЃРґРµР»Р°Р№С‚Рµ Commit.';
+    };
+
     fetch(SOURCE+'?t='+Date.now(),{cache:'no-store'})
       .then(response=>{
         if(!response.ok) throw new Error('HTTP '+response.status);
         return response.text();
       })
       .then(text=>{
-        const directSites=[...new Set(text.split(/\r?\n/).map(x=>x.trim()).filter(x=>x&&!x.startsWith('#')))];
-        const profile={
-          Name:'My Cloud Direct',
-          GlobalProxy:true,
-          RouteOrder:'block-direct-proxy',
-          RemoteDNSType:'DoH',
-          RemoteDNSDomain:'https://cloudflare-dns.com/dns-query',
-          RemoteDNSIP:'1.1.1.1',
-          DomesticDNSType:'DoH',
-          DomesticDNSDomain:'https://dns.google/dns-query',
-          DomesticDNSIP:'8.8.8.8',
-          Geoipurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat',
-          Geositeurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat',
-          DnsHosts:{'cloudflare-dns.com':'1.1.1.1','dns.google':'8.8.8.8'},
-          DirectSites:directSites,
-          DirectIp:['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','224.0.0.0/4','255.255.255.255'],
-          ProxySites:[],ProxyIp:[],BlockSites:[],BlockIp:[],
-          DomainStrategy:'IPIfNonMatch',FakeDNS:false,UseChunkFiles:true
-        };
-        const link='happ://routing/onadd/'+toBase64(JSON.stringify(profile));
-        rulesBox.textContent=directSites.join('\n');
-        status.textContent='Загружено правил: '+directSites.length;
+        cloudRules=[...new Set(text.split(/\r?\n/).map(normalize).filter(Boolean))];
+        refresh();
         button.disabled=false;
-        button.onclick=()=>location.href=link;
+        copyButton.disabled=false;
+        button.onclick=()=>location.href=profileLink(allRules());
       })
-      .catch(error=>status.textContent='Не удалось загрузить direct.txt: '+error.message);
+      .catch(error=>status.textContent='РќРµ СѓРґР°Р»РѕСЃСЊ Р·Р°РіСЂСѓР·РёС‚СЊ direct.txt: '+error.message);
   </script>
 </body>
 </html>
