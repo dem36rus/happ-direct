@@ -31,11 +31,19 @@
     <button class="chip" data-rule="geosite:yandex">+ Яндекс</button>
     <button class="chip" data-rule="geosite:mailru-group">+ Mail.ru</button>
   </div>
-  <button id="install" disabled>Установить / обновить в Happ</button>
+  <button id="install" disabled>Скопировать профиль для Happ</button>
   <button id="copy" class="secondary" disabled>Скопировать итоговый direct.txt</button>
   <button id="clear" class="secondary">Очистить добавленные</button>
   <p id="message" class="ok"></p>
-  <p class="muted">Профиль: My Cloud Direct. После изменения direct.txt снова откройте эту страницу и нажмите кнопку.</p>
+  <textarea id="clipboard-output" readonly hidden aria-label="Профиль для копирования"></textarea>
+  <ol>
+    <li>Добавьте сайты и нажмите «Скопировать профиль для Happ».</li>
+    <li>В Happ откройте «Настройки → Правила маршрутизации → ⋯ → Импорт профиля из буфера».</li>
+    <li>Выберите <strong>vless.ugol.red</strong> и подтвердите замену «My Cloud Direct».</li>
+    <li>Переподключите Happ, чтобы применить исключения.</li>
+  </ol>
+  <p class="muted">Всегда выбирайте одну и ту же подписку. Профиль в «Списке серверов» можно удалить после переноса правил в vless.ugol.red. Новые сайты добавляйте через эту форму и повторяйте импорт в ту же подписку.</p>
+  <p class="muted">Добавленные строки сохраняются в этом браузере. Для общего списка на разных компьютерах сохраните итоговый direct.txt в GitHub.</p>
   <details><summary>Показать загруженные правила</summary><pre id="rules"></pre></details>
   <script>
     const SOURCE='https://raw.githubusercontent.com/dem36rus/happ-direct/main/direct.txt';
@@ -46,6 +54,7 @@
     const message=document.querySelector('#message');
     const status=document.querySelector('#status');
     const rulesBox=document.querySelector('#rules');
+    const clipboardOutput=document.querySelector('#clipboard-output');
     let cloudRules=[];
 
     function toBase64(value){
@@ -90,6 +99,23 @@
       localStorage.setItem('happ-direct-added',input.value);
     }
 
+    async function copyText(value){
+      clipboardOutput.hidden=true;
+      try{
+        await navigator.clipboard.writeText(value);
+        return true;
+      }catch{
+        clipboardOutput.value=value;
+        clipboardOutput.hidden=false;
+        clipboardOutput.focus();
+        clipboardOutput.select();
+        let copied=false;
+        try{copied=document.execCommand('copy')}catch{}
+        if(copied) clipboardOutput.hidden=true;
+        return copied;
+      }
+    }
+
     input.value=localStorage.getItem('happ-direct-added')||'';
     input.addEventListener('input',()=>{message.textContent='';refresh()});
     document.querySelectorAll('[data-rule]').forEach(chip=>chip.onclick=()=>{
@@ -100,15 +126,10 @@
     clearButton.onclick=()=>{input.value='';message.textContent='Добавленные строки очищены';refresh()};
     copyButton.onclick=async()=>{
       const result=allRules().join('\n')+'\n';
-      try{
-        await navigator.clipboard.writeText(result);
-      }catch{
-        input.value=result;
-        input.focus();
-        input.select();
-        document.execCommand('copy');
-      }
-      message.textContent='Итоговый direct.txt скопирован. Вставьте его вместо содержимого файла на GitHub и сделайте Commit.';
+      const copied=await copyText(result);
+      message.textContent=copied
+        ?'Итоговый direct.txt скопирован. Вставьте его вместо содержимого файла на GitHub и сделайте Commit.'
+        :'Скопируйте выделенный список: Ctrl+C. Затем сохраните его в direct.txt на GitHub.';
     };
 
     fetch(SOURCE+'?t='+Date.now(),{cache:'no-store'})
@@ -121,7 +142,12 @@
         refresh();
         button.disabled=false;
         copyButton.disabled=false;
-        button.onclick=()=>location.href=profileLink(allRules());
+        button.onclick=async()=>{
+          const copied=await copyText(profileLink(allRules()));
+          message.textContent=copied
+            ?'Профиль скопирован. В Happ импортируйте его из буфера в vless.ugol.red и подтвердите замену My Cloud Direct. Затем переподключите Happ.'
+            :'Нажмите Ctrl+C, чтобы скопировать выделенный профиль. Затем импортируйте его из буфера в vless.ugol.red в Happ.';
+        };
       })
       .catch(error=>status.textContent='Не удалось загрузить direct.txt: '+error.message);
   </script>

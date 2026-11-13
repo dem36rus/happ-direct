@@ -106,3 +106,9 @@ domain:superjob.ru
 domain:kontur.ru
 domain:diadoc.ru
 domain:nalog.ru
+
+# Сайты, которым нужен прямой доступ
+domain:vseinstrumenti.ru
+domain:max.ru
+domain:oneme.ru
+domain:lemanapro.ru
