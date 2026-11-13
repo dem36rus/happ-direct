@@ -1,0 +1,22 @@
+[Unit]
+Description=Scoped routing profile delivery for a 3x-ui subscription
+After=network.target x-ui.service
+
+[Service]
+Type=simple
+DynamicUser=yes
+StateDirectory=happ-direct
+StateDirectoryMode=0700
+LoadCredential=config.json:/etc/happ-direct/config.json
+ExecStart=/usr/bin/python3 /usr/local/lib/happ-direct/server.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

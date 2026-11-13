@@ -15,11 +15,20 @@
     pre{white-space:pre-wrap;background:#f3f4f6;padding:16px;border-radius:10px;max-height:360px;overflow:auto}
     .muted{color:#666}
     .ok{color:#087b35}
+    input[type=password]{box-sizing:border-box;width:100%;padding:10px;border:1px solid #bbb;border-radius:8px}
   </style>
 </head>
 <body>
   <h1>Happ Direct</h1>
   <p id="status">Загрузка списка…</p>
+  <p id="sync-status" class="muted">Подключение подписки проверяется…</p>
+  <details id="sync-settings">
+    <summary>Подключение подписки 3x-ui</summary>
+    <p class="muted">Используйте персональную ссылку подключения или введите ключ. Пароль панели 3x-ui и пароль сервера здесь не нужны.</p>
+    <label for="sync-key">Ключ подключения</label>
+    <input id="sync-key" type="password" autocomplete="off" placeholder="Ключ из персональной настройки">
+    <button id="save-sync" class="secondary">Подключить подписку</button>
+  </details>
   <h2>Добавить сайты</h2>
   <p class="muted">По одному адресу на строку. Можно вставлять домены, маски или полные ссылки:</p>
   <textarea id="input" placeholder="ozon.ru&#10;*.wildberries.ru&#10;https://www.gosuslugi.ru/&#10;geosite:category-bank-ru"></textarea>
@@ -36,14 +45,14 @@
   <button id="clear" class="secondary">Очистить добавленные</button>
   <p id="message" class="ok"></p>
   <textarea id="clipboard-output" readonly hidden aria-label="Профиль для копирования"></textarea>
-  <ol>
+  <ol id="steps">
     <li>Добавьте сайты и нажмите «Установить / Обновить в Happ».</li>
     <li>В Happ откройте «Настройки → Правила маршрутизации → ⋯ → Импорт профиля из буфера».</li>
     <li>Выберите <strong>vless.ugol.red</strong> и подтвердите замену «My Cloud Direct».</li>
     <li>Переподключите Happ, чтобы применить исключения.</li>
   </ol>
-  <p class="muted">Всегда выбирайте одну и ту же подписку. Профиль в «Списке серверов» можно удалить после переноса правил в vless.ugol.red. Новые сайты добавляйте через эту форму и повторяйте импорт в ту же подписку.</p>
-  <p class="muted">Добавленные строки сохраняются в этом браузере. Для общего списка на разных компьютерах сохраните итоговый direct.txt в GitHub.</p>
+  <p id="scope-note" class="muted">Профиль: My Cloud Direct, подписка vless.ugol.red. После первого применения ненужный профиль из «Списка серверов» можно удалить.</p>
+  <p class="muted">При подключённой подписке список сохраняется на сервере и передаётся через 3x-ui в Happ. До нажатия кнопки изменения остаются только в этом браузере.</p>
   <details><summary>Показать загруженные правила</summary><pre id="rules"></pre></details>
   <script>
     const SOURCE='https://raw.githubusercontent.com/dem36rus/happ-direct/main/direct.txt';
@@ -55,7 +64,28 @@
     const status=document.querySelector('#status');
     const rulesBox=document.querySelector('#rules');
     const clipboardOutput=document.querySelector('#clipboard-output');
+    const API='https://vless.ugol.red/happ-direct-api/v1/profile';
+    const syncStatus=document.querySelector('#sync-status');
+    const syncKey=document.querySelector('#sync-key');
+    const saveSync=document.querySelector('#save-sync');
+    const steps=document.querySelector('#steps');
     let cloudRules=[];
+    let syncConfig=null;
+    let providerRevision=null;
+    let syncLoading=false;
+    try{
+      syncConfig=JSON.parse(localStorage.getItem('happ-direct-sync-v1')||'null');
+      if(syncConfig && !/^[A-Za-z0-9_-]{40,128}$/.test(syncConfig.key||'')) syncConfig=null;
+      if(location.hash.startsWith('#sync=')){
+        const encoded=location.hash.slice(6).replace(/-/g,'+').replace(/_/g,'/');
+        const value=JSON.parse(atob(encoded));
+        if(!/^[A-Za-z0-9_-]{40,128}$/.test(value.key||'')) throw new Error('Некорректный ключ подключения');
+        syncConfig={key:value.key};
+        localStorage.setItem('happ-direct-sync-v1',JSON.stringify(syncConfig));
+        history.replaceState(null,'',location.pathname+location.search);
+      }
+    }catch{syncConfig=null;message.textContent='Не удалось прочитать настройку подключения.'}
+    if(syncConfig) syncKey.value=syncConfig.key;
 
     function toBase64(value){
       const bytes=new TextEncoder().encode(value);
@@ -66,10 +96,17 @@
 
     function normalize(line){
       let value=line.trim();
+      if(!/^regexp:/i.test(value)) value=value.replace(/\\+$/,'').trim();
       if(!value||value.startsWith('#')) return '';
-      if(/^(domain|full|regexp|keyword|geosite|geoip):/i.test(value)) return value;
+      const named=value.match(/^(domain|full):(.+)$/i);
+      if(named){
+        try{return named[1].toLowerCase()+':'+new URL('http://'+named[2].replace(/^\*\./,'')).hostname}
+        catch{return value}
+      }
+      if(/^(regexp|keyword|geosite|geoip):/i.test(value)) return value;
       try{ if(/^https?:\/\//i.test(value)) value=new URL(value).hostname; }catch{}
       value=value.replace(/^\*\./,'').replace(/^\.+/,'').replace(/\/$/,'').toLowerCase();
+      try{if(value) value=new URL('http://'+value).hostname}catch{}
       return value?'domain:'+value:'';
     }
 
@@ -86,7 +123,7 @@
         Geoipurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat',
         Geositeurl:'https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat',
         DnsHosts:{'cloudflare-dns.com':'1.1.1.1','dns.google':'8.8.8.8'},DirectSites:directSites,
-        DirectIp:['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','224.0.0.0/4','255.255.255.255'],
+        DirectIp:['10.0.0.0/8','172.16.0.0/12','192.168.0.0/16','169.254.0.0/16','224.0.0.0/4','255.255.255.255','127.0.0.0/8','::1/128','fc00::/7','fe80::/10','geoip:ru'],
         ProxySites:[],ProxyIp:[],BlockSites:[],BlockIp:[],DomainStrategy:'IPIfNonMatch',FakeDNS:false,UseChunkFiles:true
       };
       return 'happ://routing/onadd/'+toBase64(JSON.stringify(profile));
@@ -116,6 +153,57 @@
       }
     }
 
+    async function apiRequest(method,body){
+      const headers={Authorization:'Bearer '+syncConfig.key};
+      if(body) headers['Content-Type']='application/json';
+      let response;
+      try{response=await fetch(API,{method,headers,body:body?JSON.stringify(body):undefined,credentials:'omit',cache:'no-store'})}
+      catch{throw new Error('Не удалось связаться с сервером подписки. Проверьте соединение и повторите.')}
+      let value;
+      try{value=await response.json()}catch{throw new Error('Сервер подписки временно недоступен. Повторите сохранение позже.')}
+      if(!response.ok) throw new Error(value.error||('Ошибка сохранения: HTTP '+response.status));
+      if(value.subscriptionName!=='vless.ugol.red') throw new Error('Ответ получен для другой подписки. Сохранение остановлено.');
+      return value;
+    }
+
+    async function loadProviderProfile(){
+      if(!syncConfig){
+        syncStatus.textContent='Подписка не подключена. Доступен ручной импорт профиля из буфера.';
+        return;
+      }
+      syncLoading=true;
+      providerRevision=null;
+      button.disabled=true;
+      syncStatus.textContent='Загрузка сохранённых правил подписки…';
+      try{
+        const value=await apiRequest('GET');
+        const cloud=new Set(cloudRules);
+        const remote=value.profile.DirectSites.filter(rule=>!cloud.has(normalize(rule)));
+        const local=input.value.split(/\r?\n/).map(normalize).filter(Boolean);
+        input.value=[...new Set([...remote,...local])].join('\n');
+        providerRevision=value.revision;
+        refresh();
+        syncStatus.textContent='Подключено: vless.ugol.red · на сервере '+value.count+' правил';
+        steps.innerHTML='<li>Один раз в настройках маршрутизации подписки vless.ugol.red выключите «Игнорировать импорт роутинга».</li><li>Добавьте сайты и нажмите «Установить / Обновить в Happ»: список сохранится для этой подписки.</li><li>В Happ обновите подписку vless.ugol.red круговой стрелкой и переподключите Happ.</li>';
+      }catch(error){
+        syncStatus.textContent='Подписка не подключена: '+error.message;
+      }finally{
+        syncLoading=false;
+        button.disabled=providerRevision===null;
+      }
+    }
+
+    saveSync.onclick=async()=>{
+      const key=syncKey.value.trim();
+      if(!/^[A-Za-z0-9_-]{40,128}$/.test(key)){
+        message.textContent='Введите ключ подключения из персональной настройки.';
+        return;
+      }
+      syncConfig={key};
+      localStorage.setItem('happ-direct-sync-v1',JSON.stringify(syncConfig));
+      await loadProviderProfile();
+    };
+
     input.value=localStorage.getItem('happ-direct-added')||'';
     input.addEventListener('input',()=>{message.textContent='';refresh()});
     document.querySelectorAll('[data-rule]').forEach(chip=>chip.onclick=()=>{
@@ -137,17 +225,31 @@
         if(!response.ok) throw new Error('HTTP '+response.status);
         return response.text();
       })
-      .then(text=>{
+      .then(async text=>{
         cloudRules=[...new Set(text.split(/\r?\n/).map(normalize).filter(Boolean))];
         refresh();
         button.disabled=false;
         copyButton.disabled=false;
         button.onclick=async()=>{
+          if(syncConfig){
+            if(providerRevision===null || syncLoading) return;
+            button.disabled=true;
+            try{
+              const value=await apiRequest('POST',{directSites:allRules(),expectedRevision:providerRevision});
+              providerRevision=value.revision;
+              syncStatus.textContent='Подключено: vless.ugol.red · на сервере '+value.count+' правил';
+              message.textContent='Список сохранён в подписке vless.ugol.red. В Happ обновите эту подписку круговой стрелкой и переподключитесь. Отдельный импорт профиля больше не нужен.';
+            }catch(error){
+              message.textContent='Не сохранено: '+error.message;
+            }finally{button.disabled=false}
+            return;
+          }
           const copied=await copyText(profileLink(allRules()));
           message.textContent=copied
             ?'Профиль скопирован. В Happ импортируйте его из буфера в vless.ugol.red и подтвердите замену My Cloud Direct. Затем переподключите Happ.'
             :'Нажмите Ctrl+C, чтобы скопировать выделенный профиль. Затем импортируйте его из буфера в vless.ugol.red в Happ.';
         };
+        await loadProviderProfile();
       })
       .catch(error=>status.textContent='Не удалось загрузить direct.txt: '+error.message);
   </script>

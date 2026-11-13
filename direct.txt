@@ -112,3 +112,14 @@ domain:vseinstrumenti.ru
 domain:max.ru
 domain:oneme.ru
 domain:lemanapro.ru
+
+# Российские сервисы и доменные зоны
+geosite:category-bank-ru
+geosite:category-gov-ru
+geosite:category-ecommerce-ru
+geosite:category-travel-ru
+geosite:yandex
+geosite:mailru-group
+geosite:category-ru
+geosite:tld-ru
+domain:mosenergosbyt.ru
